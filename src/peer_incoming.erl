@@ -17,43 +17,38 @@
 %% @doc Ranch callback function, starts an new so far temporary process.
 %%      It will try to receive as much data as possible to then transfer
 %%      control to the hypar_node.
--spec start_link(ListenerPid :: pid(), Socket :: inet:socket(),
-                 Transport :: module(), Args :: any()) -> {ok, pid()}.
+-spec start_link(pid(), socket(), module(), any()) -> {ok, pid()}.
 start_link(ListenerPid, Socket, _Transport, Args) ->
-    Pid = spawn_link(?MODULE, incoming, [ListenerPid, Socket, Args]),
-    {ok, Pid}.
+    {ok, spawn_link(?MODULE, incoming, [ListenerPid, Socket, Args])}.
 
--spec start_listener(Identifier :: id(), Options :: options()) -> ok.
+-spec start_listener(id(), options()) -> {ok, pid()}.
 %% @doc Start up a ranch listener, closing the old one if it exists.
 start_listener({Ip, Port}=Identifier, Options) ->
     stop_listener(Identifier),
-    Args = {self(), Options},
-    {ok, _Pid} = ranch:start_listener({gen_hypar, Identifier}, 20, ranch_tcp,
-                                      [{ip, Ip}, {port, Port}], ?MODULE, Args),
-    ok.
+    ranch:start_listener({gen_hypar, Identifier}, 20, ranch_tcp,
+                         [{ip, Ip}, {port, Port}], ?MODULE, {self(), Options}).
 
--spec stop_listener(Identifier :: id()) -> ok.
+-spec stop_listener(id()) -> ok | {error, not_found}.
 %% @doc Stop the ranch listener.
 stop_listener(Identifier) ->    
     ranch:stop_listener({gen_hypar, Identifier}).
 
--spec accept_neighbour_request(Socket :: inet:socket()) -> ok | {error, any()}.
+-spec accept_neighbour_request(socket()) -> ok.
 %% @doc Accept a pending peer
 accept_neighbour_request(Socket) ->
     proto_wire:send_accept(Socket).
 
--spec decline_neighbour_request(Socket :: inet:socket()) -> ok | {error, any()}.
+-spec decline_neighbour_request(socket()) -> ok.
 %% @doc Decline a pending peer
 decline_neighbour_request(Socket) ->
     proto_wire:send_decline(Socket).
 
--spec close(Socket :: inet:socket()) -> ok.
+-spec close(socket()) -> ok.
 %% @doc Close a socket
 close(Socket) ->
     proto_wire:close(Socket).
 
--spec incoming(Listener :: pid(), Socket :: inet:socket(),
-               {HyparNode :: pid(), Options :: options()}) -> ok.
+-spec incoming(pid(), socket(), {pid(), options()}) -> ok.
 %% @doc Start to receive an incoming connection and then transfer control
 %%      to the hypar node.
 incoming(ListenerPid, Socket, {HyparNode, Options}) ->

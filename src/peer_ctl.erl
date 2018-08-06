@@ -37,34 +37,33 @@
                 hypar_node  :: pid(),
                 peer_send   :: pid()}).
 
--spec start_link(Identifier :: id(), Peer :: id(), Socket :: inet:socket(),
-                 GenHypar :: pid(), HyparNode :: pid()) -> {ok, pid()}.
+-spec start_link(id(), id(), socket(), pid(), pid()) -> {ok, pid()}.
 %% @doc Start a control peer
 start_link(Identifier, Peer, Socket, GenHypar, HyparNode) ->
     Args = [Identifier, Peer, Socket, GenHypar, HyparNode],
     gen_server:start_link(?MODULE, Args, []).
 
--spec send_message(Pid :: pid(), Msg :: iolist()) -> ok.
+-spec send_message(pid(), iolist()) -> ok.
 %% @doc Send a message to a peer
 send_message(Pid, Msg) ->
     gen_server:cast(Pid, {message, Msg}).
 
--spec incoming_message(Pid :: pid(), Msg :: active_message()) -> ok.
+-spec incoming_message(pid(), active_message()) -> ok.
 %% @doc Receive an incoming message from a peer
 incoming_message(Pid, Msg) ->
     gen_server:cast(Pid, {incoming, Msg}).
 
--spec forward_join(Pid :: pid, Peer :: id(), TTL :: ttl()) -> ok.
+-spec forward_join(pid(), id(), ttl()) -> ok.
 %% @doc Send a forward join to a peer
 forward_join(Pid, Peer, TTL) ->
     gen_server:cast(Pid, {forward_join, Peer, TTL}).
 
--spec shuffle(Pid :: pid(), Peer :: id(), TTL :: ttl(), XList :: xlist()) -> ok.
+-spec shuffle(pid(), id(), ttl(), xlist()) -> ok.
 %% @doc Send a shuffle to a peer
 shuffle(Pid, Peer, TTL, XList) ->
     gen_server:cast(Pid, {shuffle, Peer, TTL, XList}).
 
--spec disconnect(Pid :: pid()) -> ok.
+-spec disconnect(pid()) -> ok.
 %% @doc Send a disconnect message to a peer
 disconnect(Pid) ->
     gen_server:cast(Pid, disconnect).
@@ -145,17 +144,17 @@ handle_incoming(disconnect, S) ->
     hypar_node:disconnect(S#state.hypar_node, S#state.remote),
     {stop, normal, S}.
 
+-spec register_peer_ctl(id(), id()) -> true.
 %% @doc Register a control peer
--spec register_peer_ctl(Identifier :: id(), Peer :: id()) -> boolean().
 register_peer_ctl(Identifier, Peer) ->
     gen_hypar_util:register(name(Identifier, Peer)).
 
--spec wait_for(Identifier :: id(), Peer :: id()) -> {ok, pid()}.
+-spec wait_for(id(), id()) -> {ok, pid()}.
 %% @doc Wait for a control peer to start
 wait_for(Identifier, Peer) ->
     gen_hypar_util:wait_for(name(Identifier, Peer)).
 
--spec name(Identifier :: id(), Peer :: id()) -> {peer_ctl, id(), id()}.
+-spec name(id(), id()) -> {peer_ctl, id(), id()}.
 %% @doc Gproc name of a control peer
 name(Identifier, Peer) ->
     {peer_ctl, Identifier, Peer}.

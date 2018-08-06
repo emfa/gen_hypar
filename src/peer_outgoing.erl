@@ -13,45 +13,39 @@
 
 -export([join/3, join_reply/3, neighbour/4, shuffle_reply/4]).
 
--spec join(Myself :: id(), Peer :: id(), Options :: options()) ->
-                  {ok, inet:socket()}.
+-spec join(id(), id(), options()) -> {ok, socket()}.
 %% @doc Start a new connection and fire away a join
 join(Myself, Peer, Options) ->
     {ok, Socket} = proto_wire:start_connection(Myself, Peer, Options),
-    ok = proto_wire:send_join(Socket, Myself),
+    proto_wire:send_join(Socket, Myself),
     {ok, Socket}.
 
--spec join_reply(Myself :: id(), Peer :: id(), Options :: options()) ->
-                        {ok, inet:socket()}.
+-spec join_reply(id(), id(), options()) -> {ok, socket()}.
 %% @doc Start a new outgoing connection and fire away a join-reply
 join_reply(Myself, Peer, Options) ->
     {ok, Socket} = proto_wire:start_connection(Myself, Peer, Options),
-    ok = proto_wire:send_join_reply(Socket, Myself),
+    proto_wire:send_join_reply(Socket, Myself),
     {ok, Socket}.
 
--spec neighbour(Myself :: id(), Peer :: id(), Priority :: priority(),
-                Options :: options()) -> {ok, inet:socket()}.
+-spec neighbour(id(), id(), priority(),options()) -> {ok, socket()}.
 %% @doc Start a new outgoing connection and try to become neighbours
 neighbour(Myself, Peer, Priority, Options) ->
     Timeout = gen_hypar_opts:timeout(Options),
     {ok, Socket} = proto_wire:start_connection(Myself, Peer, Options),
-    ok = proto_wire:send_neighbour_request(Socket, Myself, Priority),
+    proto_wire:send_neighbour_request(Socket, Myself, Priority),
     case proto_wire:wait_for_neighbour_reply(Socket, Timeout) of
         accept  -> {ok, Socket};
         decline -> decline
     end.
 
--spec shuffle_reply(Myself :: id(), Peer :: id(), XList :: id(),
-                    Options :: options()) -> ok.
+-spec shuffle_reply(id(), id(), id(), options()) -> pid().
 %% @doc Since shuffle replys are just temporary connections we spawn a temp-
 %%      process.
 shuffle_reply(Myself, Peer, XList, Options) ->
-    spawn(fun() -> do_shuffle_reply(Myself, Peer, XList, Options) end),
-    ok.
+    spawn(fun() -> do_shuffle_reply(Myself, Peer, XList, Options) end).
 
--spec do_shuffle_reply(Myself :: id(), Peer :: id(), XList :: id(),
-                       Options :: options()) -> ok.                              
+-spec do_shuffle_reply(id(), id(), id(), options()) -> ok.          
 %% @doc Start a socket and just fire away the shuffle reply
 do_shuffle_reply(Myself, Peer, XList, Options) ->    
     {ok, Socket} = proto_wire:start_connection(Myself, Peer, Options),
-    ok = proto_wire:send_shuffle_reply(Socket, XList).
+    proto_wire:send_shuffle_reply(Socket, XList).

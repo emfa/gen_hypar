@@ -45,60 +45,56 @@
 %%% Operation
 %%%===================================================================
 
--spec start_link(Identifier :: id(), Options :: options()) -> {ok, pid()}.
+-spec start_link(id(), options()) -> {ok, pid()}.
 %% @doc Start the hypar_node with given id and with <em>Options</em>.
 start_link(Identifier, Options) ->
     gen_server:start_link(?MODULE, [Identifier, Options], []).
 
--spec join_cluster(Identifier :: id(), Contact :: id()) -> ok | {error, any()}.
+-spec join_cluster(pid(), id()) -> ok | {error, could_not_connect}.
 %% @doc Try to join node to a cluster.
-join_cluster(Identifier, Contact) ->
-    gen_server:call(get_hypar_node(Identifier), {join_cluster, Contact}).
+join_cluster(HyparNode, Contact) ->
+    gen_server:call(HyparNode, {join_cluster, Contact}).
 
--spec get_peers(Identifier :: id()) -> list(peer()).
+-spec get_peers(pid()) -> list(peer()).
 %% @doc Get all peers.
-get_peers(Identifier) ->
-    gen_server:call(get_hypar_node(Identifier), get_peers).
+get_peers(HyparNode) ->
+    gen_server:call(HyparNode, get_peers).
 
 %%%===================================================================
 %%% Incoming events
 %%%===================================================================
 
--spec join(HyparNode :: pid(), Peer :: id(), Socket :: inet:socket()) -> ok.
+-spec join(pid(), id(), socket()) -> ok.
 %% @doc Join a peer to a node.
 join(HyparNode, Peer, Socket) ->
     gen_server:cast(HyparNode, {join, Peer, Socket}).
 
--spec forward_join(HyparNode :: pid(), Peer :: id(), NewNode :: id(),
-                   TTL :: ttl()) -> ok.
+-spec forward_join(pid(), id(), id(), ttl()) -> ok.
 %% @doc A forward join event carrying a new node and a ttl to the node
 forward_join(HyparNode, Peer, NewNode, TTL) ->
     gen_server:cast(HyparNode, {forward_join, Peer, NewNode, TTL}).
 
--spec join_reply(HyparNode :: pid(), Peer :: id(), Socket :: inet:socket()) ->
-                        ok.
+-spec join_reply(pid(), id(), socket()) -> ok.
 %% @doc A join reply from a peer to the node
 join_reply(HyparNode, Peer, Socket) ->
     gen_server:cast(HyparNode, {join_reply, Peer, Socket}).
 
--spec neighbour(HyparNode :: pid(), Peer :: id(), Priority :: priority(),
-                Socket :: inet:socket()) -> ok.
+-spec neighbour(pid(), id(), priority(), inet:socket()) -> ok.
 %% @doc Neighbour request from a peer to the node
 neighbour(HyparNode, Peer, Priority, Socket) ->
     gen_server:cast(HyparNode, {neighbour, Peer, Priority, Socket}).
 
--spec disconnect(HyparNode :: pid(), Peer :: id()) -> ok.
+-spec disconnect(pid(), id()) -> ok.
 %% @doc Disconnect a peer from the node
 disconnect(HyparNode, Peer) ->
     gen_server:cast(HyparNode, {disconnect, Peer}).
 
--spec shuffle(HyparNode :: pid(), Peer :: pid(), Requester :: id(), TTL :: ttl(),
-              XList :: xlist()) -> ok.
+-spec shuffle(pid(), pid(), id(), ttl(), xlist()) -> ok.
 %% @doc A shuffle request to the node from a peer
 shuffle(HyparNode, Peer, Requester, TTL, XList) ->
     gen_server:cast(HyparNode, {shuffle, Peer, Requester, TTL, XList}).
 
--spec shuffle_reply(HyparNode :: pid(), ReplyXList :: xlist()) -> ok.
+-spec shuffle_reply(pid(), xlist()) -> ok.
 %% @doc A shuffle reply to the node from a temporary peer
 shuffle_reply(HyparNode, ReplyXList) ->
     gen_server:cast(HyparNode, {shuffle_reply, ReplyXList}).
@@ -226,7 +222,7 @@ handle_cast({shuffle, Peer, Req, TTL, XList}, S) ->
         %% Accept the shuffle request, add to passive view and reply
         false ->
             RXList = gen_hypar_util:take_n_random(length(XList), PassiveV),
-            ok = peer_outgoing:shuffle_reply(Myself, Req, RXList, Options),
+            peer_outgoing:shuffle_reply(Myself, Req, RXList, Options),
             {noreply, add_xlist(S, XList, RXList)}
     end;
 
@@ -289,6 +285,7 @@ terminate(_, S) ->
     peer_incoming:stop_listener(S#st.id),
     ok.
 
+-spec accept_forward_join(id(), #st{}) -> {noreply, #st{}}.
 %% @doc Accept a forward join, just discard if there are problems
 accept_forward_join(Peer, S0) ->
     #st{id=Myself, activev=ActiveV, opts=Options} = S0,
@@ -305,13 +302,13 @@ accept_forward_join(Peer, S0) ->
             {noreply, S0}
     end.
 
--spec send_forward_joins(NewPeer :: id(), TTL :: ttl(),
-                         ActiveV :: list(peer())) -> ok.
+-spec send_forward_joins(id(), ttl(), active_view()) -> ok.
 %% @doc send out forward joins after an incoming join
 send_forward_joins(NewPeer, TTL, ActiveV) ->
     ForwardFun = fun(Pid) -> peer:forward_join(Pid, NewPeer, TTL) end,
     lists:foreach(ForwardFun, get_pids(remove_active(NewPeer, ActiveV))).
 
+-spec accept_neighbour(id(), socket(), #st{}) -> {noreply, #st{}}.
 %% @doc Accept a neighbour request and spin up a peer, discard if any
 %%          errors occur.
 accept_neighbour(Peer, Socket, S) ->
@@ -323,6 +320,7 @@ accept_neighbour(Peer, Socket, S) ->
             {noreply, S}
     end.
 
+-spec decline_neighbour(socket(), #st{}) -> {noreply, #st{}}.
 %% @doc Decline a neighbour request
 decline_neighbour(Socket, S) ->
     peer_incoming:decline_neighbour_request(Socket),
@@ -332,7 +330,7 @@ decline_neighbour(Socket, S) ->
 %%% Active view related
 %%%===================================================================
 
--spec add_active_peer(Peer :: id(), Socket :: inet:socket(), S0 :: #st{}) -> #st{}.
+-spec add_active_peer(id(), socket(), #st{}) -> #st{}.
 %% @doc Add a peer to the active view, removing a peer if necessary. The new
 %%      state is returned. If a node has to be dropped, then it is informed
 %%      via a DISCONNECT message and placed in the passive view.
@@ -350,22 +348,24 @@ add_active_peer(Peer, Socket, S0) ->
     S#st{activev=add_active({Peer, Pid, MRef}, S#st.activev),
          passivev=remove_passive(Peer, S#st.passivev)}.
 
--spec drop_random_active(S :: #st{}) -> #st{}.
+-spec drop_random_active(#st{}) -> #st{}.
 %% @doc Drop a random node from the active view  down to the passive
 %%      view. Send a disconnect message to the dropped node.
 drop_random_active(S) ->
-    #st{activev=ActiveV0, passivev=PassiveV0, opts=Options} = S,
+    #st{activev=ActiveV0, passivev=PassiveV0, gen_hypar=GenHypar,
+        opts=Options} = S,
 
     Slots = length(PassiveV0)-gen_hypar_opts:passive_size(Options)+1,
     {{Peer, Pid, MRef}, ActiveV} = gen_hypar_util:drop_random_element(ActiveV0),
     PassiveV = add_passive(Peer, gen_hypar_util:drop_n_random(Slots, PassiveV0)),
 
+    gen_hypar:link_down(GenHypar, Peer),
     ok = peer:disconnect(Pid),
     erlang:demonitor(MRef, [flush]),
     
     S#st{activev=ActiveV, passivev=PassiveV}.
 
--spec find_new_active(S :: #st{}) -> #st{}.
+-spec find_new_active(#st{}) -> #st{}.
 %% @doc Find a new active peer. The function will send neighbour requests to
 %%      nodes in passive view until it finds a good one or no more good exist.
 find_new_active(S) ->
@@ -379,16 +379,14 @@ find_new_active(S) ->
             add_active_peer(Peer, Socket, S#st{passivev=PassiveV})
     end.
 
--spec find_neighbour(Myself :: id(), Priority :: priority(),
-                     PassiveV :: passive_view(), Options :: options()) ->
-                            {{id(), inet:socket()} | no_valid, passive_view()}.
+-spec find_neighbour(id(), priority(), passive_view(), options()) ->
+                            {{id(), socket()} | no_valid, passive_view()}.
 %% @doc Try to find a new active neighbour
 find_neighbour(Myself, Priority, PassiveV, Options) ->
     find_neighbour(Myself, Priority, PassiveV, Options, []).
 
--spec find_neighbour(Myself :: id(), Priority :: priority(), PassiveV :: passive_view(),
-                     Options :: options(), Tried :: view()) ->
-                            {{id(), inet:socket()} | no_valid, passive_view()}.
+-spec find_neighbour(id(), priority(), passive_view(), options(), view()) ->
+                            {{id(), socket()} | no_valid, passive_view()}.
 %% @doc Helper function for find_neighbour/3.
 find_neighbour(_, _, [], _, Tried) ->
     {no_valid, Tried};
@@ -405,42 +403,41 @@ find_neighbour(Myself, Priority, PassiveV0, Options, Tried) ->
             find_neighbour(Myself, Priority, Passive, Options, Tried)
     end.
 
--spec get_ids(ActiveV :: active_view()) -> view().
+-spec get_ids(active_view()) -> view().
 %% @doc Pick out all ids of the peers
 get_ids(ActiveV) ->
     [Peer || {Peer,_,_} <- ActiveV].
 
--spec get_pids(ActiveV :: active_view()) -> list(pid()).
+-spec get_pids(active_view()) -> list(pid()).
 %% @doc Pick out all pids of the peers
 get_pids(ActiveV) ->
     lists:map(fun({_,Pid,_}) -> Pid end, ActiveV).
 
--spec remove_mrefs(ActiveV :: active_view()) -> list(peer()).
+-spec remove_mrefs(active_view()) -> list(peer()).
 %% @doc Strip away the monitor references when sending the peers to a process
 remove_mrefs(ActiveV) ->
     [{Peer, Pid} || {Peer, Pid, _} <- ActiveV].
 
--spec add_active(PeerEntry :: peer(), ActiveV :: active_view()) ->
-                        active_view().
+-spec add_active(active_peer(), active_view()) -> active_view().
 %% @doc Just add an entry
 add_active(PeerEntry, ActiveV) ->
     [PeerEntry|ActiveV].
 
--spec remove_active(Pid   :: pid(), ActiveV :: active_view()) -> active_view();
-                   (Peer  :: id(), ActiveV :: active_view()) -> active_view().
+-spec remove_active(pid(), active_view()) -> active_view();
+                   (id(), active_view()) -> active_view().
 %% @doc Remove an active entry by either pid or id
 remove_active(Pid, ActiveV) when is_pid(Pid) ->
     lists:keydelete(Pid, 2, ActiveV);
 remove_active(Peer, ActiveV) ->
     lists:keydelete(Peer, 1, ActiveV).
 
--spec peer_ok(Peer :: id(), Myself :: id(), ActiveV :: active_view()) -> boolean().
+-spec peer_ok(id(), id(), active_view()) -> boolean().
 %% @doc Check to see that a peer is ok, i.e it's not this node and not in the
 %%      active view.
 peer_ok(Peer, Myself, ActiveV) ->
     Peer =/= Myself andalso not in_active_view(Peer, ActiveV).
 
--spec in_active_view(Peer :: id(), ActiveV :: active_view()) -> boolean().
+-spec in_active_view(id(), active_view()) -> boolean().
 %% @doc See if a peer id is already in given active view.
 in_active_view(Peer, ActiveV) ->
     lists:keymember(Peer, 1, ActiveV).
@@ -449,7 +446,7 @@ in_active_view(Peer, ActiveV) ->
 %%% Passive view functions
 %%%===================================================================
 
--spec add_passive_peer(Peer :: id(), S :: #st{}) -> #st{}.
+-spec add_passive_peer(id(), #st{}) -> #st{}.
 %% @doc Add a peer to the passive view , removing random entries if needed.
 add_passive_peer(Peer, S) ->
     #st{id=Myself, activev=ActiveV, passivev=PassiveV0, opts=Options} = S,
@@ -464,20 +461,18 @@ add_passive_peer(Peer, S) ->
             S
     end.
 
--spec peer_ok(Peer :: id(), Myself :: id(), ActiveV :: active_view(),
-              PassiveV :: passive_view()) -> boolean().
+-spec peer_ok(id(), id(), active_view(), passive_view()) -> boolean().
 %% @doc Check that a peer is considered ok. That is, it's not this node or
 %%      in any of the views.
 peer_ok(Peer, Myself, ActiveV, PassiveV) ->
     peer_ok(Peer, Myself, ActiveV) andalso not lists:member(Peer, PassiveV).
 
--spec add_passive(PeerId :: id(), PassiveV :: passive_view()) -> passive_view().
+-spec add_passive(id(), passive_view()) -> passive_view().
 %% @doc Just add an element
 add_passive(PeerId, PassiveV) ->
     [PeerId|PassiveV].
 
--spec remove_passive(PeerId :: id(), PassiveV :: passive_view()) ->
-                            passive_view().
+-spec remove_passive(id(), passive_view()) -> passive_view().
 %% @doc Just a wrapper for lists:delete/2.
 remove_passive(PeerId, PassiveV) ->
     lists:delete(PeerId, PassiveV).
@@ -486,12 +481,12 @@ remove_passive(PeerId, PassiveV) ->
 %%% Shuffle related functions
 %%%===================================================================
 
--spec shuffle_timer(ShufflePeriod :: pos_integer()) -> ok.
+-spec shuffle_timer(pos_integer()) -> ok.
 %% @doc Start the shuffle timer
 shuffle_timer(ShufflePeriod) ->
     erlang:send_after(ShufflePeriod, self(), shuffle), ok.
 
--spec add_xlist(S :: #st{}, XList0 :: xlist(), ReplyList :: xlist()) -> #st{}.
+-spec add_xlist(#st{}, xlist(), xlist()) -> #st{}.
 %% @doc Incorporate an exchange list into our passive view. If the passive view
 %%      is full, first drop ids we recently sent away otherwise just drop random
 %%      ids.
@@ -507,7 +502,7 @@ add_xlist(S, XList0, ReplyList) ->
     PassiveV = free_slots(Slots, PassiveV0, ReplyList),
     S#st{passivev=PassiveV++XList}.
 
--spec create_xlist(S :: #st{}) -> xlist().
+-spec create_xlist(#st{}) -> xlist().
 %% @doc Create an exchange list.
 create_xlist(S) ->
     #st{id=Myself, activev=ActiveV0, passivev=PassiveV, opts=Options} = S,
@@ -528,7 +523,7 @@ create_xlist(S) ->
 get_priority([]) -> high;
 get_priority(_)  -> low.
 
--spec free_slots(I :: integer(), List :: list(T), Rs :: list(T)) -> list(T).
+-spec free_slots(integer(), list(T), list(T)) -> list(T).
 %% @doc Free up slots in a list. Negative inputs are just ignored and the same
 %%      list is returned. Elements from the second list are dropped first then
 %%      random.
@@ -546,22 +541,17 @@ free_slots(I, List, [R|Rs]) ->
 %%% Register hypar node
 %%%===================================================================
 
--spec register_hypar_node(Identifier :: id()) -> yes | no.
+-spec register_hypar_node(id()) -> true.
 %% @doc Register a hypar node
 register_hypar_node(Identifier) ->    
     gen_hypar_util:register(name(Identifier)).
 
--spec get_hypar_node(Identifier :: id()) -> {ok, pid()}.
-%% @doc Retrive a hypar_nodes pid
-get_hypar_node(Identifier) ->
-    gproc:where({n, l, name(Identifier)}).
-
--spec wait_for(Identifier :: id()) -> {ok, pid()}.
+-spec wait_for(id()) -> {ok, pid()}.
 %% @doc Wait for a the hypar node.
 wait_for(Identifier) ->
     gen_hypar_util:wait_for(name(Identifier)).
 
--spec name(Identifier :: id()) -> {hypar_node, id()}.
+-spec name(id()) -> {hypar_node, id()}.
 %% @doc Gproc name of the hypar node
 name(Identifier) ->
     {hypar_node, Identifier}.

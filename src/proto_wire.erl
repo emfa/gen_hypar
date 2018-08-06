@@ -10,9 +10,10 @@
 -include("gen_hypar.hrl").
 
 -export([start_connection/3, close/1, send/2, send_join/2, send_join_reply/2,
-         send_shuffle_reply/2, send_neighbour_request/3,
-         wait_for_neighbour_reply/2, send_accept/1, send_decline/1]).
--export([message/1, forward_join/2, shuffle/3, disconnect/0, keep_alive/0]).
+         send_neighbour_request/3, wait_for_neighbour_reply/2, send_accept/1,
+         send_decline/1, send_message/2, send_forward_join/3, send_shuffle/4,
+         send_keep_alive/1, send_disconnect/1, send_shuffle_reply/2]).
+-export([message/1, forward_join/2, shuffle/3]).
 -export([handle_incoming_connection/2, decode_msg/1]).
 
 %% Protocol string, a new connection should always start with this
@@ -35,11 +36,7 @@
 -define(DECLINE, 0). %% Decline a neighbour request
 -define(ACCEPT,  1). %% Accept a neighbour request
 
--spec handle_incoming_connection(Socket :: inet:socket(), Options :: options()) ->
-                                        {join, id()} |
-                                        {join_reply, id()} |
-                                        {neighbour, id(), priority()} |
-                                        {shuffle_reply, xlist()}.
+-spec handle_incoming_connection(socket(), options()) -> pre_active_message().
 %% @private These are the possible incoming first messages on a connection
 handle_incoming_connection(Socket, Options) ->
     inet:setopts(Socket, sockopts(Options)),
@@ -62,35 +59,64 @@ handle_incoming_connection(Socket, Options) ->
 
 %% Send functions
 
+-spec send(socket(), iolist()) -> ok.
 %% @private Send a binary but packet it with a length header first
-send(Socket, Bin) ->
-    Len = byte_size(Bin),
-    ok = gen_tcp:send(Socket, <<Len:32/integer, Bin/binary>>).
+send(Socket, IOList) ->
+    Bin = erlang:iolist_to_binary(IOList),
+    Len = byte_size(Bin),    
+    gen_tcp:send(Socket, <<Len:32/integer, Bin/binary>>).
 
+-spec send_join(socket(), id()) -> ok.
 %% @private Send a join
 send_join(Socket, Identifier) ->
     send(Socket, join(Identifier)).
 
+-spec send_join_reply(socket(), id()) -> ok.
 %% @private Send a join reply
 send_join_reply(Socket, Identifier) ->
     send(Socket, join_reply(Identifier)).
 
+-spec send_neighbour_request(socket(), id(), priority()) -> ok.
 %% @private Send a neighbour request
 send_neighbour_request(Socket, Myself, Priority) ->
     send(Socket, neighbour(Myself, Priority)).
 
+-spec send_accept(socket()) -> ok.
 %% @private Send an accept byte
 send_accept(Socket) ->
-    send(Socket, accept()).
+    send(Socket, <<?ACCEPT>>).
 
+-spec send_decline(socket()) -> ok.
 %% @private Send a decline byte
 send_decline(Socket) ->
-    send(Socket, decline()).
+    send(Socket, <<?DECLINE>>).
 
+-spec send_message(socket(), iolist()) -> ok.
+send_message(Socket, Msg) ->
+    send(Socket, message(Msg)).
+
+-spec send_forward_join(socket(), id(), ttl()) -> ok.
+send_forward_join(Socket, Peer, TTL) ->
+    send(Socket, forward_join(Peer, TTL)).
+
+-spec send_shuffle(socket(), id(), ttl(), xlist()) -> ok.
+send_shuffle(Socket, Peer, TTL, XList) ->
+    send(Socket, shuffle(Peer, TTL, XList)).
+
+-spec send_keep_alive(socket()) -> ok.
+send_keep_alive(Socket) ->
+    send(Socket, <<?KEEPALIVE>>).
+
+-spec send_disconnect(socket()) -> ok.
+send_disconnect(Socket) ->
+    send(Socket, <<?DISCONNECT>>).
+
+-spec send_shuffle_reply(socket(), xlist()) -> ok.
 %% @private Send a shuffle reply
 send_shuffle_reply(Socket, XList) ->
     send(Socket, shuffle_reply(XList)).
 
+-spec wait_for_neighbour_reply(socket(), timeout()) -> accept | decline.
 %% @private Wait for a neighbour reply, receive the packet header and
 %%          the accept/decline byte.
 wait_for_neighbour_reply(Socket, Timeout) ->
@@ -101,6 +127,7 @@ wait_for_neighbour_reply(Socket, Timeout) ->
 
 %% Start and close a connection
 
+-spec start_connection(id(), id(), options()) -> {ok, socket()}.
 %% @private Start a new connection, send the protocol string and return the socket.
 start_connection({LocalIp, _}, {RemoteIp, RemotePort}, Options) ->
     Timeout = gen_hypar_opts:timeout(Options),
@@ -109,52 +136,49 @@ start_connection({LocalIp, _}, {RemoteIp, RemotePort}, Options) ->
     ok = gen_tcp:send(Socket, <<?PROTOSTR>>),
     {ok, Socket}.
 
+-spec sockopts(options()) -> list(gen_tcp:option()).
 %% @private The socket options used
 sockopts(Options) ->
     [binary, {active, false}, {packet, raw}, {nodelay, true},
      {send_timeout, gen_hypar_opts:send_timeout(Options)}].
 
+-spec close(socket()) -> ok.
 %% @private Close a socket
 close(Socket) ->
     gen_tcp:close(Socket).
 
-%% Binary messages
-accept()     -> <<?ACCEPT>>.
-decline()    -> <<?DECLINE>>.
-keep_alive() -> <<?KEEPALIVE>>.
-disconnect() -> <<?DISCONNECT>>.
+-spec message(iolist()) -> iolist().
+message(IOList) ->
+    [?MESSAGE, IOList].
 
-message(Bin) ->
-    <<?MESSAGE, Bin/binary>>.
-
+-spec join(id()) -> iolist().
 join(Identifier) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    <<?JOIN, BId:?IDSIZE/binary>>.
+    [?JOIN, gen_hypar_util:encode_id(Identifier)].
 
+-spec join_reply(id()) -> iolist().
 join_reply(Identifier) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    <<?JOINREPLY, BId:?IDSIZE/binary>>.
+    [?JOINREPLY, gen_hypar_util:encode_id(Identifier)].
 
+-spec forward_join(id(), ttl()) -> iolist().
 forward_join(Identifier, TTL) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    <<?FORWARDJOIN, BId:?IDSIZE/binary, TTL/integer>>.
+    [?FORWARDJOIN, gen_hypar_util:encode_id(Identifier), TTL].
 
+-spec neighbour(id(), priority()) -> iolist().
 neighbour(Identifier, high) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    <<?HNEIGHBOUR, BId:?IDSIZE/binary>>;
+    [?HNEIGHBOUR, gen_hypar_util:encode_id(Identifier)];
 neighbour(Identifier, low) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    <<?LNEIGHBOUR, BId:?IDSIZE/binary>>.
+    [?LNEIGHBOUR, gen_hypar_util:encode_id(Identifier)].
 
+-spec shuffle(id(), ttl(), xlist()) -> iolist().
 shuffle(Identifier, TTL, XList) ->
-    BId = gen_hypar_util:encode_id(Identifier),
-    BXList = gen_hypar_util:encode_idlist(XList),
-    <<?SHUFFLE, BId:?IDSIZE/binary, TTL/integer, BXList/binary>>.
+    [?SHUFFLE, gen_hypar_util:encode_id(Identifier), TTL,
+     gen_hypar_util:encode_idlist(XList)].
 
+-spec shuffle_reply(xlist()) -> iolist().
 shuffle_reply(XList) ->
-    BXList = gen_hypar_util:encode_idlist(XList),
-    <<?SHUFFLEREPLY, BXList/binary>>.
+    [?SHUFFLEREPLY, gen_hypar_util:encode_idlist(XList)].
 
+-spec decode_msg(binary()) -> active_message().
 %% @doc Decode incoming binaries
 decode_msg(<<?MESSAGE, Msg/binary>>) ->
     {message, Msg};

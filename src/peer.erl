@@ -24,15 +24,12 @@
 -export([start_link/6, new/6, forward_join/3, shuffle/4, send_message/2,
          disconnect/1]).
 
--spec start_link(Identifier :: id(), Peer :: id(), Socket :: inet:socket(),
-                 GenHypar :: pid(), HyparNode :: pid(), Options :: options()) ->
-                        {ok, pid()}.
+-spec start_link(id(), id(), socket(), pid(), pid(), options()) -> {ok, pid()}.
 %% @doc Start a peer (supervisor)
 start_link(Identifier, Peer, Socket, GenHypar, HyparNode, Options) ->
     supervisor:start_link(?MODULE, [Identifier, Peer, Socket, GenHypar, HyparNode, Options]).
 
--spec new(PeerSup :: pid(), Myself :: id(), Peer :: id(), Socket :: inet:socket(),
-          GenHypar :: pid(), Options :: options()) -> {ok, pid()}.
+-spec new(pid(), id(), id(), socket(), pid(), options()) -> {ok, pid()}.
 %% @doc Create a new peer, wait for the sub-process to spin up. The given
 %%      socket is ready to become an active peer.
 %%
@@ -49,24 +46,25 @@ new(PeerSup, Myself, Peer, Socket, GenHypar, Options) ->
     peer_recv:go_ahead(RecvPid, Socket),
     {ok, CtlPid}.
 
--spec forward_join(Pid :: pid(), Peer :: id(), TTL :: ttl()) -> ok.
+-spec forward_join(pid(), id(), ttl()) -> ok.
 %% @doc Send a forward join to a peer
 forward_join(Pid, Peer, TTL) ->
     peer_ctl:forward_join(Pid, Peer, TTL).
 
--spec shuffle(Pid :: pid(), Peer :: id(), TTL :: ttl(), XList :: xlist()) -> ok.
+-spec shuffle(pid(), id(), ttl(), xlist()) -> ok.
 %% @doc Send a shuffle to a peer
 shuffle(Pid, Peer, TTL, XList) ->
     peer_ctl:shuffle(Pid, Peer, TTL, XList).
 
-
+-spec send_message(pid(), iolist()) -> ok.
 %% @doc Send a message to a peer
 send_message(Pid, Msg) ->
     peer_ctl:send_message(Pid, Msg).
 
+-spec disconnect(pid()) -> ok.
 %% @doc Disconnect a peer, demonitor it
-disconnect(CtlPid) ->
-    peer_ctl:disconnect(CtlPid).
+disconnect(Pid) ->
+    peer_ctl:disconnect(Pid).
 
 %% A peer consist of three processes, a control, a send and
 %% a receive process.

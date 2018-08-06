@@ -27,26 +27,24 @@
 
 %% State
 -record(state, {peer_ctl :: pid(),
-                socket   :: inet:socket(),
+                socket   :: socket(),
                 timeout  :: timeout(),
                 data     :: binary()}).
 
--spec start_link(Identifier :: id(), Peer :: id(), Socket :: inet:socket(),
-                 Timeout :: timeout()) -> {ok, pid()}.
+-spec start_link(id(), id(), socket(), timeout()) -> {ok, pid()}.
 %% @doc Start a reciving process
 start_link(Identifier, Peer, Socket, Timeout) ->
     gen_server:start_link(?MODULE, [Identifier, Peer, Socket, Timeout], []).
 
--spec go_ahead(Pid :: pid(), Socket :: inet:socket()) ->
-                      {go_ahead, inet:socket()}.
+-spec go_ahead(pid(), socket()) -> {go_ahead, socket()}.
 %% @doc Tell the receiving process that it's ok to proceed.
 go_ahead(Pid, Socket) ->
     Pid ! {go_ahead, Socket}.
 
 init([Identifier, Peer, Socket, Timeout]) ->
-    {ok, CtlPid} = peer_ctl:wait_for(Identifier, Peer),
-    true = register_peer_send(Identifier, Peer),
-    {ok, #state{peer_ctl=CtlPid,
+    {ok, Pid} = peer_ctl:wait_for(Identifier, Peer),
+    register_peer_send(Identifier, Peer),
+    {ok, #state{peer_ctl=Pid,
                 socket=Socket,
                 timeout=Timeout,
                 data = <<>> }}.
@@ -75,7 +73,7 @@ terminate(_, S) ->
 code_change(_, S, _) ->
     {ok, S}.
 
--spec handle_packet(S :: #state{}, Bin :: binary()) -> {noreply, #state{}}.
+-spec handle_packet(#state{}, binary()) -> {noreply, #state{}}.
 %% @doc Handle an incoming packet, decoding it and send it to the control
 %%      process
 handle_packet(S, <<>>) ->
@@ -88,17 +86,17 @@ handle_packet(S, <<Len:32, Bin/binary>>) when byte_size(Bin) >= Len ->
 handle_packet(S, Bin) ->
     {noreply, S#state{data=Bin}, 0}.
 
--spec register_peer_send(Identifier :: id(), Peer :: id()) -> boolean().
+-spec register_peer_send(id(), id()) -> true.
 %% @doc Register the receiving process
 register_peer_send(Identifier, Peer) ->
     gen_hypar_util:register(name(Identifier, Peer)).
 
--spec wait_for(Identifier :: id(), Peer :: id()) -> {ok, pid()}.
+-spec wait_for(id(), id()) -> {ok, pid()}.
 %% @doc Wait for a receiving process
 wait_for(Identifier, Peer) ->
     gen_hypar_util:wait_for(name(Identifier, Peer)).
 
--spec name(Identifier :: id(), Peer :: id()) -> {peer_recv, id(), id()}.
+-spec name(id(), id()) -> {peer_recv, id(), id()}.
 %% @doc Name of a receive process
 name(Identifier, Peer) ->
     {peer_recv, Identifier, Peer}.

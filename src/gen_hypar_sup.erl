@@ -16,8 +16,7 @@
 %% supervisor callback
 -export([init/1]).
 
--spec start_link(Identifier :: id(), Mod :: module(), ModArgs :: any(),
-                 Options :: options()) -> {ok, pid()}.
+-spec start_link(id(), module(), any(), options()) -> {ok, pid()}.
 %% @doc Start the top level supervisor
 start_link(Identifier, Mod, ModArgs, Options) ->
     supervisor:start_link(?MODULE, [Identifier, Mod, ModArgs, Options]).

@@ -19,12 +19,12 @@
 %% supervisor callback
 -export([init/1]).
 
--spec start_link(Identifier :: id()) -> {ok, pid()}.
+-spec start_link(id()) -> {ok, pid()}.
 %% @doc Start the peer supervisor
 start_link(Identifier) ->
     supervisor:start_link(?MODULE, [Identifier]).
 
--spec wait_for(Identifier :: id()) -> {ok, pid()}.
+-spec wait_for(id()) -> {ok, pid()}.
 %% @doc Wait for the peer supervisor to start
 wait_for(Identifier) ->
     gen_hypar_util:wait_for(name(Identifier)).
@@ -36,12 +36,12 @@ init([Identifier]) ->
             temporary, 5000, supervisor, [peer]},
     {ok, {{simple_one_for_one, 5, 10}, [Peer]}}.
 
--spec register_peer_sup(Identifier :: id()) -> boolean().
+-spec register_peer_sup(id()) -> true.
 %% @doc Register the peer supervisor
 register_peer_sup(Identifier) ->
     gen_hypar_util:register(name(Identifier)).
 
--spec name(Identifier :: id()) -> {peer_sup, id()}.
+-spec name(id()) -> {peer_sup, id()}.
 %% @doc Gproc name of the peer supervisor
 name(Identifier) ->
     {peer_sup, Identifier}.

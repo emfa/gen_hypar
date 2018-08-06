@@ -13,16 +13,16 @@
          default/1]).
 
 %% @doc Esthetic functions
--spec arwl(Opts :: options())           -> pos_integer().
--spec prwl(Opts :: options())           -> pos_integer().
--spec active_size(Opts :: options())    -> pos_integer().
--spec passive_size(Opts :: options())   -> pos_integer().
--spec k_active(Opts :: options())       -> pos_integer().
--spec k_passive(Opts :: options())      -> pos_integer().
--spec shuffle_period(Opts :: options()) -> pos_integer().
--spec timeout(Opts :: options())        -> pos_integer().
--spec send_timeout(Opts :: options())   -> pos_integer().
--spec keep_alive(Opts :: options())     -> pos_integer().
+-spec arwl(options())           -> pos_integer().
+-spec prwl(options())           -> pos_integer().
+-spec active_size(options())    -> pos_integer().
+-spec passive_size(options())   -> pos_integer().
+-spec k_active(options())       -> pos_integer().
+-spec k_passive(options())      -> pos_integer().
+-spec shuffle_period(options()) -> pos_integer().
+-spec timeout(options())        -> pos_integer().
+-spec send_timeout(options())   -> pos_integer().
+-spec keep_alive(options())     -> pos_integer().
 arwl(Opts)           -> proplists:get_value(arwl, Opts).
 prwl(Opts)           -> proplists:get_value(prwl, Opts).
 active_size(Opts)    -> proplists:get_value(active_size, Opts).
@@ -34,7 +34,7 @@ timeout(Opts)        -> proplists:get_value(timeout, Opts).
 send_timeout(Opts)   -> proplists:get_value(send_timeout, Opts).
 keep_alive(Opts)     -> proplists:get_value(keep_alive, Opts).
 
--spec default(Options :: options()) -> options().
+-spec default(options()) -> options().
 %% @doc Check so all neccessary options are defined, otherwise default them.
 default(Options) ->
     lists:foldl(fun({Opt, _}=OptPair, Acc0) ->

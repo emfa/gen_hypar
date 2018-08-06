@@ -5,8 +5,10 @@
 %% @doc Defines records & types used in gen_hypar
 %% -------------------------------------------------------------------
 
+-type socket() :: inet:socket().
+
 %% @doc An <em>identifier</em> is a tuple of an IP address and port number
--type id() :: {inet:ip_address(),
+-type id() :: {{byte(), byte(), byte(), byte()},
                inet:port_number()}.
 
 %% Size of an identifier in bytes
