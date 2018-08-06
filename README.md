@@ -1,12 +1,12 @@
-#gen_hypar
----------
+# gen_hypar
+
 This is an implementation in Erlang of the [Hybrid Partial View][] membership protocol by João Leitão, José Pereira and Luís Rodrogies.
 
 [Hybrid Partial View]: http://docs.di.fc.ul.pt/jspui/bitstream/10455/2981/1/07-13.pdf
 
-##Quickstart
+## Quickstart
 
-###Firing up a node
+### Firing up a node
 This is a general behaviour for processes that relies on a group membership service. To start a process that runs along side of the group membership serivce we need to define the callback module for  the ``gen_hypar`` behaviour. The callback needs to implement one function:
                
                start_link(Identifier, ModuleArgs) -> {ok, pid()}.
@@ -23,7 +23,7 @@ When things are fired up we probably want to reach the gen_hypar process, this c
                
                gen_hypar:where(Identifier) -> undefined | pid().
 
-###Enter the cluster
+### Enter the cluster
 
 The node is started isolated and alone until it is joined to the cluster:
 
@@ -33,7 +33,7 @@ This joins the node ``Identifier`` to ``Contact``.
 
 If the node recovers from some previous error and start up again on the same ip and port then there is the possibility that it automatically rejoins the cluster. This is because it will with very high probability lie in some nodes passive view. Though it's probably smarter to just rejoin after a disconnect.
 
-###Where are the peers?
+### Where are the peers?
 As soon as the node has been joined to a cluster the gen_hypar-process will start receiving messages on the form:
                
                {link_up, {PeerId, Pid}}
@@ -49,17 +49,17 @@ If you for some reason want to run only the group-membership service then implem
                
                gen_hypar:get_peers(Identifier) -> list({id(), pid()}
 
-###Sending data
+### Sending data
 To send data you first need to have the pid of an active peer as explained above. Then you use the function:
                
                gen_hypar:send_message(Pid, Message) -> ok.
 
 The `Message` should be an ``iolist()``. Thus a ``binary()`` will also work.
 
-###Example
+### Example
 There is an example module included in examples/flooder.erl. *flooder* is a reliable flooding broadcaster, though very simple and naive. 
 
-##Supervision tree
+## Supervision tree
 This is rather implementation specific. The call to ``gen_hypar:start_link/4`` will return the pid of the top supervisor. Thus this call can be used to incorporate the process into another supervision tree. The tree looks like:
 
                         gen_hypar_sup
@@ -77,7 +77,7 @@ The peers themselves are a supervision tree of 4 processes:
 
 ``peer_ctl`` is the middle-man between the ``hypar_node`` which is responsible for the protocol logic and the gen_hypar-process. ``peer_send`` and ``peer_recv`` are responsible for on-wire sending and receiving.
 
-##Other projects on top of hyparerl
+## Other projects on top of hyparerl
 Check out [plumcast][], it's in early development. It is an implementation of the Plumtree protocol developed by the same guys. Plumcast builds a broadcast tree on top of hyparerl to reduce the network traffic without sacrificing to much latency.
 
 Also check out [floodcast][], also very early development, that will basically be a more serious implementation of the simple flooder example.
@@ -85,13 +85,47 @@ Also check out [floodcast][], also very early development, that will basically b
 [plumcast]: emfa/plumcast
 [floodcast]: emfa/floodcast
 
-##Application options
+## Application options
+
 <table>
- <tr><td> **active_size**    </td><td> Maximum entries in the active view.</td><td>5</td></tr>
- <tr><td> **passive_size**   </td><td> Same as above but for passive view.</td><td>30</td></tr>
- <tr><td> **arwl**           </td><td> Active Random Walk Length.</td><td>6</td></tr>
- <tr><td> **prwl**           </td><td> Passive Random Walk Length.</td><td>3</td></tr>
- <tr><td> **k_active**       </td><td> The number of nodes sampled from the active view when doing a shuffle.</td><td>3</td</tr>
- <tr><td> **k_passive**      </td><td> Same as above but with passive view.</td><td>4</td></tr>
- <tr><td> **shuffle_period** </td><td> Cyclic period timer of when to do a shuffle in milliseconds.</td><td>10000</td></tr>
- <tr><td> **keep_alive**     </td><td> The time between heartbeat messages. Fine tune the responsiveness to failures.</td><td>NOTIMPL</td></tr>
+  <tr>
+    <td> <b>active_size</b>    </td>
+    <td> Maximum entries in the active view.</td>
+    <td>5</td>
+  </tr>
+  <tr>
+    <td> <b>passive_size</b>   </td>
+    <td> Same as above but for passive view.</td>
+    <td>30</td>
+  </tr>
+  <tr>
+    <td> <b>arwl</b>           </td>
+    <td> Active Random Walk Length.</td>
+    <td>6</td>
+  </tr>
+  <tr>
+    <td> <b>prwl</b>           </td>
+    <td> Passive Random Walk Length.</td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td> <b>k_active</b>       </td>
+    <td> The number of nodes sampled from the active view when doing a shuffle.</td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td> <b>k_passive</b>      </td>
+    <td> Same as above but with passive view.</td>
+    <td>4</td>
+  </tr>
+  <tr>
+    <td> <b>shuffle_period</b> </td>
+    <td> Cyclic period timer of when to do a shuffle in milliseconds.</td>
+    <td>10000</td>
+  </tr>
+  <tr>
+    <td> <b>keep_alive</b>     </td>
+    <td> The time between heartbeat messages. Fine tune the responsiveness to failures.</td>
+    <td>NOTIMPL</td>
+  </tr>
+</table>
